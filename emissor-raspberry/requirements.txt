@@ -1,0 +1,5 @@
+pyserial>=3.5
+smbus2>=0.4.3
+adafruit-blinka>=8.50.0
+adafruit-circuitpython-mmc56x3>=1.0.0
+adafruit-circuitpython-bme280>=2.6.0

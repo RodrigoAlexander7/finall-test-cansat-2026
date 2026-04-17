@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1.7
+FROM --platform=linux/arm/v7 debian:trixie AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake pkg-config \
+    libopencv-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+
+# Copia solo el módulo C++ que compilas
+COPY emissor-raspberry/src/cpp/ /work/cpp/
+
+# Se eliminó el comando 'file' que causaba el error
+RUN cmake -S /work/cpp -B /work/cpp/build -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build /work/cpp/build -j$(nproc) && \
+    strip /work/cpp/build/cansat_image_tool && \
+    ldd /work/cpp/build/cansat_image_tool > /work/cpp/build/ldd.txt
+
+FROM scratch AS artifact
+COPY --from=builder /work/cpp/build/cansat_image_tool /out/cansat_image_tool
+COPY --from=builder /work/cpp/build/ldd.txt /out/ldd.txt
