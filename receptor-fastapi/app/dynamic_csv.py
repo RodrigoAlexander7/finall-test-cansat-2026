@@ -55,7 +55,7 @@ class DynamicCsvWriter:
             writer = csv.DictWriter(f, fieldnames=new_fieldnames)
             writer.writeheader()
             for row in rows:
-                writer.writerow({field: row.get(field, "") for field in new_fieldnames})
+                writer.writerow({field: row.get(field, 0) for field in new_fieldnames})
 
         self._fieldnames = new_fieldnames
 

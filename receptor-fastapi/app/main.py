@@ -143,8 +143,7 @@ def root() -> dict[str, str]:
     return {"message": "CanSat receiver running"}
 
 
-@app.websocket("/ws/telemetry")
-async def telemetry_ws(websocket: WebSocket) -> None:
+async def _telemetry_ws_handler(websocket: WebSocket) -> None:
     manager: WebSocketManager = app.state.ws_manager
     await manager.connect(websocket)
 
@@ -157,3 +156,13 @@ async def telemetry_ws(websocket: WebSocket) -> None:
         pass
     finally:
         await manager.disconnect(websocket)
+
+
+@app.websocket("/ws/telemetry")
+async def telemetry_ws(websocket: WebSocket) -> None:
+    await _telemetry_ws_handler(websocket)
+
+
+@app.websocket("/ws")
+async def telemetry_ws_compat(websocket: WebSocket) -> None:
+    await _telemetry_ws_handler(websocket)
