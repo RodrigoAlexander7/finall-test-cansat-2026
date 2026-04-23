@@ -105,7 +105,9 @@ class XBeeTransmitter:
 
         for attempt in range(1, self.retries + 1):
             try:
+                self.serial_port.reset_input_buffer()
                 self.serial_port.write(frame)
+                self.serial_port.flush()
                 raw = self._read_api_frame()
                 if raw is None:
                     self.logger.warning("Sin respuesta TX status (intento %s/%s)", attempt, self.retries)

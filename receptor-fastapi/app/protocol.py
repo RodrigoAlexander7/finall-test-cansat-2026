@@ -1,12 +1,30 @@
 from __future__ import annotations
 
-import json
 import struct
 from dataclasses import dataclass
 
 MAGIC = b"\xAB\xCD"
 PACKET_TYPE_IMAGE_CHUNK = 0x01
 PACKET_TYPE_TELEMETRY = 0x02
+
+# Must match emissor-raspberry/src/packet_protocol.py
+TELEMETRY_STRUCT_FMT = ">q11fH"
+TELEMETRY_STRUCT_SIZE = struct.calcsize(TELEMETRY_STRUCT_FMT)  # 54
+TELEMETRY_FIELDS_ORDER = [
+    "time",
+    "alt_ms5611",
+    "alt_bme280",
+    "pressure",
+    "temperature",
+    "velocity_z",
+    "accel_x",
+    "accel_y",
+    "accel_z",
+    "gyro_z",
+    "voltage",
+    "current",
+    "packets_received",
+]
 
 
 @dataclass
@@ -45,12 +63,13 @@ def parse_application_payload(payload: bytes) -> ImageChunkPacket | TelemetryPac
         )
 
     if packet_type == PACKET_TYPE_TELEMETRY:
+        body = payload[3:]
+        if len(body) < TELEMETRY_STRUCT_SIZE:
+            return None
         try:
-            body = payload[3:].decode("utf-8")
-            data = json.loads(body)
-            if not isinstance(data, dict):
-                return None
-            return TelemetryPacket(telemetry=data)
+            values = struct.unpack(TELEMETRY_STRUCT_FMT, body[:TELEMETRY_STRUCT_SIZE])
+            telemetry = dict(zip(TELEMETRY_FIELDS_ORDER, values))
+            return TelemetryPacket(telemetry=telemetry)
         except Exception:
             return None
 

@@ -1,0 +1,32 @@
+set -a
+source .env
+set +a
+uvicorn app.main:app --host 0.0.0.0 --port 8080
+
+
+set -a
+source .env
+set +a
+python3 src/pipeline.py
+
+
+scp -r usuario@10.212.187.5:/home/usuario/finall-test-cansat-2026/emissor-raspberry/storage .
+
+
+scp /home/totora/Documents/foto.jpg usuario@10.212.187.5:/home/usuario/finall-test-cansat-2026/context/
+
+
+Ese resultado b'' en loopback confirma que el problema está antes del XBee: la UART por pines no está retornando datos.
+
+Haz esta secuencia exacta, en orden:
+
+Libera el puerto serie
+sudo fuser -v /dev/serial0
+sudo fuser -v /dev/ttyAMA0
+Si sale algún proceso, ciérralo.
+
+Asegura que getty no esté tomando ttyAMA0
+sudo systemctl stop serial-getty@ttyAMA0.service
+sudo systemctl disable serial-getty@ttyAMA0.service
+
+
