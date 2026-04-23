@@ -1,0 +1,2 @@
+time,alt_ms5611,alt_bme280,pressure,temperature,velocity_z,accel_x,accel_y,accel_z,gyro_z,voltage,current,packets_received
+1776964690232,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1

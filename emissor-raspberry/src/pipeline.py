@@ -186,8 +186,7 @@ class EmissorPipeline:
             port=self.cfg.serial_port,
             baudrate=self.cfg.baudrate,
             dest_addr_64=self.cfg.destination_addr_64,
-            retries=self.cfg.xbee_retries,
-            ack_timeout_s=self.cfg.xbee_ack_timeout_s,
+            inter_packet_delay_s=self.cfg.inter_packet_delay_s,
             logger=self.logger,
         )
 
