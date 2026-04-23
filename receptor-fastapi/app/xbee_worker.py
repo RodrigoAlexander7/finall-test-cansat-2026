@@ -38,8 +38,9 @@ class ImageAssemblyState:
 
 
 class ImageAssembler:
-    def __init__(self, ttl_s: float = 30.0) -> None:
+    def __init__(self, ttl_s: float = 30.0, logger=None) -> None:
         self.ttl_s = ttl_s
+        self.logger = logger
         self._images: dict[int, ImageAssemblyState] = {}
 
     def add_chunk(self, packet: ImageChunkPacket) -> bytes | None:
@@ -47,24 +48,98 @@ class ImageAssembler:
         if state is None:
             state = ImageAssemblyState(total_chunks=packet.total_chunks)
             self._images[packet.image_id] = state
+            if self.logger:
+                self.logger.info(
+                    "image_assembly_start image_id=%s total_chunks=%s",
+                    packet.image_id,
+                    packet.total_chunks,
+                )
 
         state.total_chunks = packet.total_chunks
         state.chunks[packet.chunk_index] = packet.data
         state.last_update_s = time.monotonic()
 
-        if len(state.chunks) >= state.total_chunks:
-            image_data = b"".join(state.chunks[i] for i in range(state.total_chunks) if i in state.chunks)
+        received = len(state.chunks)
+
+        # Log progress every 10 chunks
+        if received % 10 == 0 or received == state.total_chunks:
+            if self.logger:
+                self.logger.info(
+                    "image_assembly_progress image_id=%s chunks=%s/%s (%.0f%%)",
+                    packet.image_id,
+                    received,
+                    state.total_chunks,
+                    100.0 * received / state.total_chunks,
+                )
+
+        if received >= state.total_chunks:
+            image_data = b"".join(
+                state.chunks.get(i, b"") for i in range(state.total_chunks)
+            )
             self._images.pop(packet.image_id, None)
+            if self.logger:
+                self.logger.info(
+                    "image_assembly_complete image_id=%s size=%sB",
+                    packet.image_id,
+                    len(image_data),
+                )
             return image_data
 
-        self.cleanup()
-        return None
+        # Check for stale images and save partial data
+        partial = self._cleanup_and_collect_partial()
+        return partial
 
-    def cleanup(self) -> None:
+    def _cleanup_and_collect_partial(self) -> bytes | None:
+        """Remove stale images. If a stale image has significant data, return it."""
         now = time.monotonic()
-        stale_ids = [image_id for image_id, state in self._images.items() if now - state.last_update_s > self.ttl_s]
+        stale_ids = [
+            image_id
+            for image_id, state in self._images.items()
+            if now - state.last_update_s > self.ttl_s
+        ]
+
+        result = None
         for image_id in stale_ids:
-            self._images.pop(image_id, None)
+            state = self._images.pop(image_id)
+            received = len(state.chunks)
+            pct = 100.0 * received / state.total_chunks if state.total_chunks > 0 else 0
+
+            if self.logger:
+                self.logger.warning(
+                    "image_assembly_timeout image_id=%s chunks=%s/%s (%.0f%%) ttl=%.1fs",
+                    image_id,
+                    received,
+                    state.total_chunks,
+                    pct,
+                    self.ttl_s,
+                )
+
+            # Save partial image if we have at least 50% of chunks
+            if received >= state.total_chunks * 0.5:
+                result = b"".join(
+                    state.chunks.get(i, b"\x00" * 71) for i in range(state.total_chunks)
+                )
+                if self.logger:
+                    self.logger.info(
+                        "image_assembly_partial_save image_id=%s size=%sB",
+                        image_id,
+                        len(result),
+                    )
+
+        return result
+
+    def force_flush(self) -> list[tuple[int, bytes]]:
+        """Force-save all in-progress images. Call on shutdown."""
+        results = []
+        for image_id, state in list(self._images.items()):
+            received = len(state.chunks)
+            if received > 0:
+                image_data = b"".join(
+                    state.chunks.get(i, b"\x00" * 71) for i in range(state.total_chunks)
+                )
+                results.append((image_id, image_data))
+        self._images.clear()
+        return results
 
 
 class XBeeReceiverWorker:
@@ -89,7 +164,7 @@ class XBeeReceiverWorker:
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
-        self._assembler = ImageAssembler(ttl_s=30.0)
+        self._assembler = ImageAssembler(ttl_s=60.0, logger=logger)
         self._packets_received = 0
 
     def start(self) -> None:
@@ -166,6 +241,7 @@ class XBeeReceiverWorker:
     def _handle_payload(self, payload: bytes) -> None:
         packet = parse_application_payload(payload)
         if packet is None:
+            self.logger.warning("rx_parse_fail payload_bytes=%s", len(payload))
             return
 
         self._packets_received += 1
